@@ -1,0 +1,91 @@
+{
+  "variables": {
+    "aws_access_key_id": "",
+    "aws_secret_key": "",
+    "chef_dir": "/etc/chef",
+    "environment": "",
+    "role": "pay-chef-base",
+    "subnet_id": "",
+    "token": "",
+    "version": "1.0.0",
+    "vpc_id": "",
+    "x509_cert_path": "",
+    "x509_key_path": ""
+  },
+  "builders": [
+    { 
+      "type": "amazon-ebs",
+      "access_key": "{{user `aws_access_key_id`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      "token": "{{user `token`}}",
+      "subnet_id": "{{user `subnet_id`}}",
+      "region": "eu-west-1",
+      "source_ami": "ami-37360a40",
+      "instance_type": "m3.medium",
+      "ssh_username": "ubuntu",
+      "associate_public_ip_address": true,
+      "vpc_id": "{{user `vpc_id`}}",
+      "iam_instance_profile": "base",
+      "ami_name": "pay-ubuntu-{{timestamp}}",
+      "ami_description": "Ubuntu cloud-image plus Pay prerequisites {{timestamp}}",
+      "ami_block_device_mappings": [{
+        "volume_size": 20,
+        "volume_type": "gp2",
+        "device_name": "/dev/sda1",
+        "delete_on_termination": "true",
+        "encrypted": false
+      }],
+      "tags": {
+        "upstream_release": "20151019",
+        "upstream_flavour": "hvm-ssd",
+        "role": "{{user `role`}}"
+        "Name": "pay-ubuntu-{{timestamp}}",
+        "version":"{{timestamp}}"
+      }
+    }
+  ],
+  "provisioners" : [
+    { "type": "shell",
+      "inline": [
+        "sleep 30",
+        "sudo apt-get update",
+        "sudo apt-get install -y unzip git",
+        "wget http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip",
+        "sudo mkdir -p /usr/local/ec2",
+        "sudo unzip ec2-ami-tools.zip -d /usr/local/ec2",
+        "sudo mv /usr/local/ec2/ec2-ami-tools-* /usr/local/ec2/ec2-ami-tools/",
+        "sudo mkdir /tmp/packer-chef-client",
+        "sudo chmod 0777 /tmp/packer-chef-client",
+        "sudo mkdir -p /etc/chef/ohai/hints",
+        "sudo chmod 0777 /etc/chef",
+        "sudo touch /etc/chef/ohai/hints/ec2.json",
+        "sudo touch /etc/chef/ohai/hints/iam.json",
+        "git clone https://github.com/joshmyers/pay-chef-base.git {{user `chef_dir`}}/cookbooks/pay-chef-base",
+        "sudo mv {{user `chef_dir`}}/cookbooks/pay-chef-base/data_bags {{user `chef_dir`}}"
+      ]
+    },
+    { "type": "chef-client",
+      "install_command": "curl -L https://www.chef.io/chef/install.sh | {{if .Sudo}}sudo{{end}} bash -s -- -P chefdk",
+      "chef_environment": "{{user `environment`}}",
+      "run_list": "recipe[pay-chef-base]",
+      "node_name": "packer-{{timestamp}}",
+      "skip_clean_client": true,
+      "skip_clean_node": true,
+      "prevent_sudo": false,
+      "execute_command": "cd {{user `chef_dir`}}/cookbooks/pay-chef-base && LANG=\"en_US.UTF-8\" berks vendor {{user `chef_dir`}}/cookbooks && cd {{user `chef_dir`}} && {{if .Sudo}}sudo {{end}}chef-client --local-mode --no-color -c {{.ConfigPath}} -j /tmp/packer-chef-client/first-boot.json",
+      "server_url": "http://localhost:8889"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "set -x",
+        "sudo apt-get remove chefdk -y",
+        "sudo rm -rf /etc/chef",
+        "sudo rm -rf /opt/chef*",
+        "sudo apt-get clean -y",
+        "sudo apt-get autoclean -y",
+        "sudo apt-get autoremove -y"
+      ]
+    }
+  ]
+}

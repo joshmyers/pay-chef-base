@@ -1,0 +1,10 @@
+#!/bin/bash -e
+
+packer build \
+  -only=amazon-ebs \
+  -var "aws_secret_key=${AWS_SECRET_ACCESS_KEY}" \
+  -var "token=${AWS_SECURITY_TOKEN}" \
+  -var "subnet_id=${SUBNET_ID}" \
+  -var "vpc_id=${VPC_ID}" \
+  -var "environment=packer" \
+  packer.json

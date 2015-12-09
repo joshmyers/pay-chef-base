@@ -1,0 +1,30 @@
+#!/bin/bash -e
+
+exec > >(tee /var/log/cibuild.log)
+exec 2>&1
+
+INSTANCE_PROFILE=$(curl http://169.254.169.254/latest/meta-data/iam/security-credentials/)
+MAC_ADDRESS=$(curl http://169.254.169.254/latest/meta-data/network/interfaces/macs/)
+
+aws_access_key_id=$(curl http://169.254.169.254/latest/meta-data/iam/security-credentials/${INSTANCE_PROFILE} | grep AccessKeyId | cut -d':' -f2 | sed 's/[^0-9A-Z]*//g')
+aws_secret_access_key=$(curl http://169.254.169.254/latest/meta-data/iam/security-credentials/${INSTANCE_PROFILE} | grep SecretAccessKey | cut -d':' -f2 | sed 's/[^0-9A-Za-z/+=]*//g')
+token=$(curl http://169.254.169.254/latest/meta-data/iam/security-credentials/${INSTANCE_PROFILE} | grep Token | cut -d':' -f2 | sed 's/[^0-9A-Za-z/+=]*//g')
+
+vpc_id=$(curl http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC_ADDRESS}/vpc-id)
+subnet_id=$(curl http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC_ADDRESS}/subnet-id)
+
+export AWS_ACCESS_KEY_ID=${aws_access_key_id}
+export AWS_SECRET_ACCESS_KEY=${aws_secret_access_key}
+export AWS_SECURITY_TOKEN=${token}
+export VPC_ID=${vpc_id}
+export SUBNET_ID=${subnet_id}
+
+if [ "${REQ_BRANCH_NAME}" == 'master' ] ; then
+  msg "Building AMI with Packer"
+  source script/ami_builder
+else
+  msg "Not building master branch, not building AMI"
+  exit 0
+fi
+
+exit 0
